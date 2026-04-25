@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy_Transfer_V2.exe</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Fira+Code&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0b0e14; --main: #00e676; --main-glow: rgba(0, 230, 118, 0.4); --text: #ffffff; }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; overflow: hidden; transition: 0.5s ease; }
+
+        /* --- Main UI --- */
+        #main-ui { display: flex; flex-direction: column; align-items: center; transition: 0.5s opacity; }
+        
+        .percentage { font-size: 3.5rem; font-weight: 800; margin-bottom: 15px; color: var(--main); text-shadow: 0 0 20px var(--main-glow); font-variant-numeric: tabular-nums; }
+        
+        .battery-container {
+            width: 130px; height: 260px; border: 3px solid rgba(255,255,255,0.2); border-radius: 20px;
+            position: relative; padding: 8px; display: flex; flex-direction: column-reverse; margin-bottom: 25px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+        .battery-container::after {
+            content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+            width: 40px; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px 5px 0 0;
+        }
+        .fill {
+            width: 100%; height: 0%; background: linear-gradient(180deg, #69ffa8 0%, #00e676 100%);
+            border-radius: 12px; box-shadow: 0 0 20px var(--main-glow); transition: height 0.1s linear;
+        }
+
+        .status-msg { font-family: 'Fira Code', monospace; font-size: 0.85rem; color: #a0a0a0; min-height: 40px; padding: 0 20px; letter-spacing: 1px; }
+
+        .btn-charge {
+            margin-top: 30px; padding: 18px 45px; border-radius: 50px; border: 2px solid var(--main);
+            background: transparent; color: var(--main); font-weight: 800; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 2px; transition: 0.2s; position: relative; overflow: hidden;
+        }
+        .btn-charge:active { background: var(--main); color: #000; transform: scale(0.95); box-shadow: 0 0 30px var(--main-glow); }
+
+        /* --- Secret Message Box (Hidden initially) --- */
+        #secret-message {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+            width: 90%; max-width: 400px; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 40px 30px;
+            opacity: 0; pointer-events: none; transition: 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        #secret-message.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+        
+        .heart-icon { font-size: 3rem; margin-bottom: 15px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        
+        h2 { font-size: 1.5rem; margin-bottom: 15px; color: #fff; }
+        p.secret-text { color: #ccc; line-height: 1.6; font-size: 0.95rem; }
+
+        /* Security Overlay */
+        #overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; justify-content: center; align-items: center; transition: 0.5s; flex-direction: column; }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <div id="overlay">
+        <h3 style="color: #fff; margin-bottom: 10px;">Connection Secured.</h3>
+        <p style="color: #666; margin-bottom: 30px; font-family: 'Fira Code'; font-size: 0.8rem;">Tap to open portal</p>
+        <button style="padding: 12px 30px; background: #fff; color: #000; border: none; border-radius: 30px; font-weight: bold; cursor: pointer;" onclick="startApp()">ENTER</button>
+    </div>
+
+    <div id="main-ui">
+        <div class="percentage" id="pct">0%</div>
+        <div class="battery-container">
+            <div class="fill" id="battery-fill"></div>
+        </div>
+        <p class="status-msg" id="msg">System ready. Waiting for energy...</p>
+
+        <button class="btn-charge" id="chargeBtn" 
+            onmousedown="startCharging()" onmouseup="stopCharging()" onmouseleave="stopCharging()"
+            ontouchstart="startCharging(event)" ontouchend="stopCharging(event)">
+            HOLD TO CHARGE
+        </button>
+    </div>
+
+    <div id="secret-message">
+        <div class="heart-icon">✨</div>
+        <h2>Energy Fully Restored</h2>
+        <p class="secret-text">
+            Hey! I know you have a super busy schedule right now.<br><br>
+            Don't take too much stress. Just wanted to send some good vibes your way. Keep smiling, you're doing great! 🤍
+        </p>
+    </div>
+
+    <script>
+        // Security: Disable Inspect & Shortcuts
+        document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 67)) || (e.ctrlKey && e.keyCode == 85)) return false; };
+
+        let level = 0;
+        let chargeInterval;
+        let isCharging = false;
+
+        function startApp() {
+            document.getElementById('overlay').style.opacity = '0';
+            setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
+        }
+
+        function updateMessages() {
+            const msgEl = document.getElementById('msg');
+            if (level < 20) msgEl.innerText = "Establishing connection...";
+            else if (level < 50) msgEl.innerText = "Syncing aesthetic vibes...";
+            else if (level < 80) msgEl.innerText = "Loading smiles into the system...";
+            else if (level < 100) msgEl.innerText = "Almost there. Keep holding!";
+        }
+
+        function startCharging(e) {
+            if (e) e.preventDefault(); // Prevent text selection on mobile hold
+            if (level >= 100 || isCharging) return;
+            
+            isCharging = true;
+            document.getElementById('chargeBtn').style.background = "var(--main)";
+            document.getElementById('chargeBtn').style.color = "#000";
+
+            chargeInterval = setInterval(() => {
+                if (level < 100) {
+                    level += 1; // Increase 1% at a time
+                    document.getElementById('battery-fill').style.height = level + "%";
+                    document.getElementById('pct').innerText = level + "%";
+                    updateMessages();
+
+                    if (level === 100) {
+                        stopCharging();
+                        triggerSuccess();
+                    }
+                }
+            }, 40); // Speed of charging (Lower is faster)
+        }
+
+        function stopCharging(e) {
+            if (e) e.preventDefault();
+            isCharging = false;
+            clearInterval(chargeInterval);
+            if(level < 100) {
+                document.getElementById('chargeBtn').style.background = "transparent";
+                document.getElementById('chargeBtn').style.color = "var(--main)";
+                if(level > 0) document.getElementById('msg').innerText = "Energy transfer paused...";
+            }
+        }
+
+        function triggerSuccess() {
+            // Fade out battery UI
+            document.getElementById('main-ui').style.opacity = "0";
+            
+            // Background color shift to soft aesthetic dark purple
+            document.body.style.background = "#140c1f";
+            
+            setTimeout(() => {
+                document.getElementById('main-ui').style.display = "none";
+                // Show Secret Message
+                const secretBox = document.getElementById('secret-message');
+                secretBox.classList.add('show');
+            }, 600);
+        }
+    </script>
+</body>
+</html>
